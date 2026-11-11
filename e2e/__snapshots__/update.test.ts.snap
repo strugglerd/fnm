@@ -1,0 +1,86 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Bash --dry-run reports an update without installing it: Bash 1`] = `
+"set -e
+eval "$(fnm env)"
+fnm install 20.11.0
+(fnm update --dry-run 20) | grep "update available" || (echo "Expected output to contain "update available"" && exit 1)"
+`;
+
+exports[`Bash --prune removes the superseded version: Bash 1`] = `
+"set -e
+eval "$(fnm env)"
+fnm install 20.11.0
+fnm update --prune 20"
+`;
+
+exports[`Bash moves aliases to the updated version and keeps the old one: Bash 1`] = `
+"set -e
+eval "$(fnm env)"
+fnm install 20.11.0
+fnm alias 20.11.0 hello
+fnm update 20"
+`;
+
+exports[`Fish --dry-run reports an update without installing it: Fish 1`] = `
+"fnm env | source
+fnm install 20.11.0
+begin; fnm update --dry-run 20; end | grep "update available"; or echo "Expected output to contain "update available"" && exit 1"
+`;
+
+exports[`Fish --prune removes the superseded version: Fish 1`] = `
+"fnm env | source
+fnm install 20.11.0
+fnm update --prune 20"
+`;
+
+exports[`Fish moves aliases to the updated version and keeps the old one: Fish 1`] = `
+"fnm env | source
+fnm install 20.11.0
+fnm alias 20.11.0 hello
+fnm update 20"
+`;
+
+exports[`PowerShell --dry-run reports an update without installing it: PowerShell 1`] = `
+"$ErrorActionPreference = "Stop"
+fnm env | Out-String | Invoke-Expression
+fnm install 20.11.0
+$($__out__ = $(fnm update --dry-run 20 | Select-String "update available"); if ($__out__ -eq $null) { exit 1 } else { $__out__ })"
+`;
+
+exports[`PowerShell --prune removes the superseded version: PowerShell 1`] = `
+"$ErrorActionPreference = "Stop"
+fnm env | Out-String | Invoke-Expression
+fnm install 20.11.0
+fnm update --prune 20"
+`;
+
+exports[`PowerShell moves aliases to the updated version and keeps the old one: PowerShell 1`] = `
+"$ErrorActionPreference = "Stop"
+fnm env | Out-String | Invoke-Expression
+fnm install 20.11.0
+fnm alias 20.11.0 hello
+fnm update 20"
+`;
+
+exports[`Zsh --dry-run reports an update without installing it: Zsh 1`] = `
+"set -e
+eval "$(fnm env)"
+fnm install 20.11.0
+(fnm update --dry-run 20) | grep "update available" || (echo "Expected output to contain "update available"" && exit 1)"
+`;
+
+exports[`Zsh --prune removes the superseded version: Zsh 1`] = `
+"set -e
+eval "$(fnm env)"
+fnm install 20.11.0
+fnm update --prune 20"
+`;
+
+exports[`Zsh moves aliases to the updated version and keeps the old one: Zsh 1`] = `
+"set -e
+eval "$(fnm env)"
+fnm install 20.11.0
+fnm alias 20.11.0 hello
+fnm update 20"
+`;

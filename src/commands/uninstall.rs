@@ -15,6 +15,16 @@ pub struct Uninstall {
     version: Option<UserVersion>,
 }
 
+impl Uninstall {
+    /// Build the command for a specific version instead of parsing it from the
+    /// command line. Used by `fnm update --prune`.
+    pub(crate) fn for_version(version: Version) -> Self {
+        Self {
+            version: Some(UserVersion::Full(version)),
+        }
+    }
+}
+
 impl Command for Uninstall {
     type Error = Error;
 

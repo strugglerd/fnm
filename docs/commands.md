@@ -18,6 +18,7 @@ Commands:
   current      Print the current Node.js version
   exec         Run a command within fnm context
   uninstall    Uninstall a Node.js version [alias: uni]
+  update       Update installed Node.js versions to the latest release on their track [alias: upgrade]
   help         Print this message or the help of the given subcommand(s)
 
 Options:
@@ -892,6 +893,90 @@ Options:
           The root directory of fnm installations
 
           [env: FNM_DIR]
+
+      --log-level <LOG_LEVEL>
+          The log level of fnm commands
+
+          [env: FNM_LOGLEVEL]
+          [default: info]
+          [possible values: quiet, error, info]
+
+      --arch <ARCH>
+          Override the architecture of the installed Node binary. Defaults to arch of fnm binary
+
+          [env: FNM_ARCH]
+          [possible values: x86, x64, x64-musl, x64-glibc217, arm64, armv7l, ppc64le, ppc64, s390x]
+
+      --version-file-strategy <VERSION_FILE_STRATEGY>
+          A strategy for how to resolve the Node version. Used whenever `fnm use` or `fnm install` is called without a version, or when `--use-on-cd` is configured on evaluation
+
+          Possible values:
+          - local:     Use the local version of Node defined within the current directory
+          - recursive: Use the version of Node defined within the current directory and all parent directories
+
+          [env: FNM_VERSION_FILE_STRATEGY]
+          [default: local]
+
+      --corepack-enabled
+          Enable corepack support for each new installation. This will make fnm call `corepack enable` on every Node.js installation. For more information about corepack see <https://nodejs.org/api/corepack.html>
+
+          [env: FNM_COREPACK_ENABLED]
+
+      --resolve-engines [<RESOLVE_ENGINES>]
+          Resolve `engines.node` field in `package.json` whenever a `.node-version` or `.nvmrc` file is not present.
+          This feature is enabled by default. To disable it, provide `--resolve-engines=false`.
+
+          Note: `engines.node` can be any semver range, with the latest satisfying version being resolved.
+          Note 2: If you disable it, please open an issue on GitHub describing _why_ you disabled it.
+                  In the future, disabling it might be a no-op, so it's worth knowing any reason to
+                  do that.
+
+          [env: FNM_RESOLVE_ENGINES]
+          [possible values: true, false]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+# `fnm update`
+
+```
+Update installed Node.js versions to the latest release on their track
+
+Each installed version is checked against the newest release of the same
+major line. Prerelease installs only update to newer builds of their own
+channel (alpha, beta, rc, ...) and never switch to a stable release.
+Aliases attached to an updated version are moved to the new version.
+
+Usage: fnm update [OPTIONS] [VERSION]...
+
+Arguments:
+  [VERSION]...
+          Only update installed versions matching these versions, aliases or semver ranges
+
+Options:
+      --dry-run
+          Only report available updates, without installing anything or moving aliases
+
+      --node-dist-mirror <NODE_DIST_MIRROR>
+          <https://nodejs.org/dist/> mirror
+
+          [env: FNM_NODE_DIST_MIRROR]
+          [default: https://nodejs.org/dist]
+
+      --fnm-dir <BASE_DIR>
+          The root directory of fnm installations
+
+          [env: FNM_DIR]
+
+      --prune
+          Uninstall the superseded version after a successful update
+
+      --progress <PROGRESS>
+          Show an interactive progress bar for the download status
+
+          [default: auto]
+          [possible values: auto, never, always]
 
       --log-level <LOG_LEVEL>
           The log level of fnm commands
