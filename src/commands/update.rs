@@ -213,10 +213,7 @@ fn prune_old_version(old: &node_semver::Version, is_current: bool, config: &FnmC
         "  removing superseded {}",
         display_version(old).cyan()
     );
-    let result = Uninstall {
-        version: Some(UserVersion::Full(Version::Semver(old.clone()))),
-    }
-    .apply(config);
+    let result = Uninstall::for_version(Version::Semver(old.clone())).apply(config);
 
     if let Err(err) = result {
         outln!(
@@ -728,6 +725,20 @@ mod tests {
             format!("{error}"),
             "Can't find an installed Node.js version matching v22.x.x"
         );
+    }
+
+    #[test]
+    fn reading_installs_and_aliases_does_not_create_directories() {
+        let base_dir = tempfile::tempdir().unwrap();
+        let config = FnmConfig::default().with_base_dir(Some(base_dir.path().to_path_buf()));
+
+        let installed = installed_versions_without_creating(&config).expect("Can list installs");
+        let aliases = read_aliases(&config).expect("Can list aliases");
+
+        assert_eq!(installed, Vec::<Version>::new());
+        assert_eq!(aliases, BTreeMap::<String, Vec<String>>::new());
+        assert!(!base_dir.path().join("node-versions").exists());
+        assert!(!base_dir.path().join("aliases").exists());
     }
 
     #[test]
