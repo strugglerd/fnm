@@ -23,7 +23,14 @@ pub fn create_alias(
 }
 
 pub fn list_aliases(config: &FnmConfig) -> std::io::Result<Vec<StoredAlias>> {
-    let vec: Vec<_> = std::fs::read_dir(config.aliases_dir())?
+    list_aliases_in(&config.aliases_dir())
+}
+
+/// List the aliases stored in `aliases_dir` without creating the directory.
+/// Callers that must not mutate the filesystem (such as `fnm update --dry-run`)
+/// use this instead of [`list_aliases`].
+pub fn list_aliases_in(aliases_dir: &std::path::Path) -> std::io::Result<Vec<StoredAlias>> {
+    let vec: Vec<_> = std::fs::read_dir(aliases_dir)?
         .filter_map(Result::ok)
         .filter_map(|x| TryInto::<StoredAlias>::try_into(x.path().as_path()).ok())
         .collect();

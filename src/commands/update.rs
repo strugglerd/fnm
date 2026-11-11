@@ -1,7 +1,7 @@
 use super::command::Command;
 use super::install::Install;
 use super::uninstall::Uninstall;
-use crate::alias::create_alias;
+use crate::alias::{create_alias, list_aliases_in};
 use crate::config::FnmConfig;
 use crate::current_version::current_version;
 use crate::installed_versions;
@@ -38,8 +38,9 @@ impl Command for Update {
     type Error = Error;
 
     fn apply(self, config: &FnmConfig) -> Result<(), Self::Error> {
-        let installed = installed_versions::list(config.installations_dir())?;
-        let selected = filter_installed(&installed, &self.version, config)?;
+        let installed = installed_versions_without_creating(config)?;
+        let aliases = read_aliases(config).map_err(|source| Error::AliasReading { source })?;
+        let selected = filter_installed(&installed, &self.version, &aliases, config)?;
 
         if selected.is_empty() {
             outln!(config, Info, "No fnm-managed Node.js versions found.");
@@ -48,17 +49,7 @@ impl Command for Update {
 
         let installed_semvers = semvers_of(&selected);
         let remote = remote_versions(config)?;
-        let candidates = build_candidates(&installed_semvers, &remote, |version| {
-            Version::Semver(version.clone())
-                .find_aliases(config)
-                .map(|aliases| {
-                    aliases
-                        .into_iter()
-                        .map(|alias| alias.name().to_string())
-                        .collect()
-                })
-        })
-        .map_err(|source| Error::AliasReading { source })?;
+        let candidates = build_candidates(&installed_semvers, &remote, &aliases);
 
         print_table(config, &candidates);
 
@@ -294,10 +285,44 @@ impl Candidate {
             .filter(|latest| *latest > &self.installed)
     }
 }
+/// Enumerate installed versions without creating the installations directory.
+fn installed_versions_without_creating(config: &FnmConfig) -> Result<Vec<Version>, Error> {
+    let installations_dir = config.base_dir_with_default().join("node-versions");
+    match installed_versions::list(&installations_dir) {
+        Ok(versions) => Ok(versions),
+        Err(installed_versions::Error::IoError { source })
+            if source.kind() == std::io::ErrorKind::NotFound =>
+        {
+            Ok(Vec::new())
+        }
+        Err(source) => Err(Error::VersionListing { source }),
+    }
+}
+
+/// Snapshot the aliases by the version they point at, without creating the
+/// aliases directory.
+fn read_aliases(config: &FnmConfig) -> Result<BTreeMap<String, Vec<String>>, std::io::Error> {
+    let aliases_dir = config.base_dir_with_default().join("aliases");
+    let aliases = match list_aliases_in(&aliases_dir) {
+        Ok(aliases) => aliases,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+        Err(err) => return Err(err),
+    };
+
+    let mut by_version: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for alias in aliases {
+        by_version
+            .entry(alias.s_ver().to_string())
+            .or_default()
+            .push(alias.name().to_string());
+    }
+    Ok(by_version)
+}
 
 fn filter_installed(
     installed: &[Version],
     filters: &[UserVersion],
+    aliases: &BTreeMap<String, Vec<String>>,
     config: &FnmConfig,
 ) -> Result<Vec<Version>, Error> {
     if filters.is_empty() {
@@ -307,7 +332,7 @@ fn filter_installed(
     for filter in filters {
         if !installed
             .iter()
-            .any(|version| filter.matches(version, config))
+            .any(|version| matches_filter(filter, version, aliases, config))
         {
             return Err(Error::VersionNotInstalled {
                 version: filter.clone(),
@@ -317,9 +342,31 @@ fn filter_installed(
 
     Ok(installed
         .iter()
-        .filter(|version| filters.iter().any(|filter| filter.matches(version, config)))
+        .filter(|version| {
+            filters
+                .iter()
+                .any(|filter| matches_filter(filter, version, aliases, config))
+        })
         .cloned()
         .collect())
+}
+
+fn matches_filter(
+    filter: &UserVersion,
+    version: &Version,
+    aliases: &BTreeMap<String, Vec<String>>,
+    config: &FnmConfig,
+) -> bool {
+    match filter.alias_name() {
+        // Alias filters are resolved against the read-only snapshot so a dry run
+        // never touches the aliases directory.
+        Some(alias_name) => aliases
+            .get(&version.v_str())
+            .is_some_and(|version_aliases| {
+                version_aliases.iter().any(|alias| alias == &alias_name)
+            }),
+        None => filter.matches(version, config),
+    }
 }
 
 fn semvers_of(versions: &[Version]) -> Vec<node_semver::Version> {
@@ -343,14 +390,11 @@ fn remote_versions(config: &FnmConfig) -> Result<Vec<node_semver::Version>, Erro
         .collect())
 }
 
-fn build_candidates<F>(
+fn build_candidates(
     installed: &[node_semver::Version],
     remote: &[node_semver::Version],
-    aliases_of: F,
-) -> Result<Vec<Candidate>, std::io::Error>
-where
-    F: Fn(&node_semver::Version) -> std::io::Result<Vec<String>>,
-{
+    aliases: &BTreeMap<String, Vec<String>>,
+) -> Vec<Candidate> {
     let mut tracks: BTreeMap<Track, Vec<node_semver::Version>> = BTreeMap::new();
     for version in installed {
         tracks
@@ -373,15 +417,18 @@ where
                 .filter(|remote_version| track.contains(remote_version))
                 .max()
                 .cloned(),
+            aliases: aliases
+                .get(&display_version(&version))
+                .cloned()
+                .unwrap_or_default(),
             stable_notice: stable_notice(&version, remote),
-            aliases: aliases_of(&version)?,
             installed: version,
             left_unchanged: versions,
         });
     }
 
     candidates.sort_by(|a, b| a.installed.cmp(&b.installed));
-    Ok(candidates)
+    candidates
 }
 
 /// The newest stable release of the same major, when it has reached the
@@ -547,14 +594,13 @@ mod tests {
             other => panic!("Expected a semver version, got {other}"),
         }
     }
-
     fn candidates(installed: &[&str], remote_versions: &[&str]) -> Vec<Candidate> {
         let installed: Vec<_> = installed.iter().map(|version| parse(version)).collect();
         let remote: Vec<_> = remote_versions
             .iter()
             .map(|version| parse(version))
             .collect();
-        build_candidates(&installed, &remote, |_| Ok(Vec::new())).expect("Can't build candidates")
+        build_candidates(&installed, &remote, &BTreeMap::new())
     }
 
     #[test]
@@ -654,8 +700,13 @@ mod tests {
             Version::parse("22.1.0").unwrap(),
         ];
 
-        let filtered = filter_installed(&installed, &[UserVersion::OnlyMajor(20)], &config)
-            .expect("Can filter installed versions");
+        let filtered = filter_installed(
+            &installed,
+            &[UserVersion::OnlyMajor(20)],
+            &BTreeMap::new(),
+            &config,
+        )
+        .expect("Can filter installed versions");
 
         assert_eq!(filtered, vec![Version::parse("20.11.0").unwrap()]);
     }
@@ -665,13 +716,38 @@ mod tests {
         let config = FnmConfig::default();
         let installed = vec![Version::parse("20.11.0").unwrap()];
 
-        let error = filter_installed(&installed, &[UserVersion::OnlyMajor(22)], &config)
-            .expect_err("Expected a missing version error");
+        let error = filter_installed(
+            &installed,
+            &[UserVersion::OnlyMajor(22)],
+            &BTreeMap::new(),
+            &config,
+        )
+        .expect_err("Expected a missing version error");
 
         assert_eq!(
             format!("{error}"),
             "Can't find an installed Node.js version matching v22.x.x"
         );
+    }
+
+    #[test]
+    fn resolves_alias_filters_from_the_read_only_snapshot() {
+        let config = FnmConfig::default();
+        let installed = vec![
+            Version::parse("20.11.0").unwrap(),
+            Version::parse("22.1.0").unwrap(),
+        ];
+        let mut aliases = BTreeMap::new();
+        aliases.insert(
+            "v20.11.0".to_string(),
+            vec!["snapshot-only-alias".to_string()],
+        );
+        let filter = UserVersion::Full(Version::Alias("snapshot-only-alias".to_string()));
+
+        let filtered = filter_installed(&installed, &[filter], &aliases, &config)
+            .expect("Can filter installed versions by alias");
+
+        assert_eq!(filtered, vec![Version::parse("20.11.0").unwrap()]);
     }
 
     #[test]
