@@ -69,6 +69,20 @@ pub enum SubCommand {
     /// > is pointing to, along with the other aliases that point to the same version.
     #[clap(name = "uninstall", bin_name = "uninstall", visible_aliases = &["uni"])]
     Uninstall(commands::uninstall::Uninstall),
+
+    /// Update installed Node.js versions to the latest release on their track
+    ///
+    /// Each installed version is checked against the newest release of the same
+    /// major line. Prerelease installs only update to newer builds of their own
+    /// channel (alpha, beta, rc, ...) and never switch to a stable release.
+    /// Aliases attached to an updated version are moved to the new version.
+    #[clap(
+        name = "update",
+        bin_name = "update",
+        visible_aliases = &["upgrade"],
+        verbatim_doc_comment
+    )]
+    Update(commands::update::Update),
 }
 
 impl SubCommand {
@@ -86,6 +100,7 @@ impl SubCommand {
             Self::Exec(cmd) => cmd.call(config),
             Self::Uninstall(cmd) => cmd.call(config),
             Self::Unalias(cmd) => cmd.call(config),
+            Self::Update(cmd) => cmd.call(config),
         }
     }
 }

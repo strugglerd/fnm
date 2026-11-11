@@ -12,7 +12,7 @@ use thiserror::Error;
 
 #[derive(clap::Parser, Debug)]
 pub struct Uninstall {
-    version: Option<UserVersion>,
+    pub(crate) version: Option<UserVersion>,
 }
 
 impl Command for Uninstall {
